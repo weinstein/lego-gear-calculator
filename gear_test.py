@@ -103,6 +103,42 @@ class GearCalculatorTest(unittest.TestCase):
         ])
         self.assertIn(expected_sample, axle_trees)
 
+    def test_arrange_axles_constrained(self):
+        calc2d = GearCalculator2D()
+        calc2d.mesh_gen.error = 0.05
+        seq = GearTreeNode.Sequence((g16, g16), (g24, g12), (g24, g12))
+        axle_trees = set(calc2d.generate_axle_trees(seq, dx_range=Range(0,0), dy_range=Range(0,0)))
+        expected_sample = axle_seq(
+                (g16, g16, 2, 0),
+                (g24, g12, 1, 2),
+                (g24, g12, 0, 0),
+        )
+        self.assertIn(expected_sample, axle_trees)
+
+    def test_clock_hands(self):
+        calc2d = GearCalculator2D()
+        calc2d.mesh_gen.error = 0.05
+        trains = calc2d.generate_trains(ratio=12, max_pairs=4, first_gear=g16)
+        axle_trees = set(calc2d.generate_flat_axle_trees(
+            trains, dx_range=Range(0,0), dy_range=Range(0,0)))
+        self.assertIn(
+            axle_seq(
+                (g16, g16, 2, 0),
+                (g16, g20, 3, 2),
+                (g24, g8,  3, 0),
+                (g40, g8,  0, 0),
+            ),
+            axle_trees)
+        self.assertIn(
+            axle_seq(
+                (g16, g16, 2, 0),
+                (g24, g12, 3, 2),
+                (g24, g12, 2, 0),
+                (g24, g8,  0, 0),
+            ),
+            axle_trees)
+
+
 class GearLayerTest(unittest.TestCase):
     def test_z_ub(self):
         layer = GearLayer3D()
@@ -180,6 +216,20 @@ class GearLayerTest(unittest.TestCase):
             (2, 0, 1, g16),
             ], msg=f'actual: {layers.layers[0].z_sorted_gears()}')
         self.assertEqual(layers.layers[1].z_sorted_gears(), [])
+
+    def test_clock_hands(self):
+        calc2d = GearCalculator2D()
+        calc2d.mesh_gen.error = 0.05
+        trains = calc2d.generate_trains(ratio=12, max_pairs=4, first_gear=g16)
+        axle_trees = calc2d.generate_flat_axle_trees(
+            trains, dx_range=Range(0,0), dy_range=Range(0,0))
+        arrangements = list(GearLayers3D().add_axle_tree(t) for t in axle_trees)
+        def _sort_key(layers):
+            return (layers.z_upper_bound(), len(layers.layers))
+        arrangements.sort(key=_sort_key)
+        arrangements = list(map(GearLayers3D.z_sorted_gears, arrangements))
+        self.assertGreaterEqual(len(arrangements), 1)
+        self.assertEqual(len(arrangements[0]), 2)
 
 
 if __name__ == '__main__':

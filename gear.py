@@ -211,6 +211,10 @@ class GearCalculator2D:
         for arranged_edges in self._arrange_tree(gear_root_node, dx_range, dy_range):
             yield self._arranged_to_axle_tree(arranged_edges)
 
+    def generate_flat_axle_trees(self, gear_trees, dx_range=Range(), dy_range=Range()):
+        return itertools.chain.from_iterable(
+                (self.generate_axle_trees(t, dx_range, dy_range) for t in gear_trees))
+
 
 @dataclass
 class GearLayer3D:
@@ -273,3 +277,10 @@ class GearLayers3D:
                 child_needs_new_layer = self.cur_layer().intersects_axle(child.x, child.y)
                 self.cur_layer().add_gear(child.x, child.y, g2, force_z=z)
                 todo.append((child, child_needs_new_layer))
+        return self
+
+    def z_upper_bound(self):
+        return self.layers[-1].z_upper_bound()
+
+    def z_sorted_gears(self):
+        return list(map(GearLayer3D.z_sorted_gears, self.layers))

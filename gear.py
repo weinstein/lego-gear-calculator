@@ -4,6 +4,7 @@ import math
 
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
+from memoize import memoize_generator
 
 
 @dataclass(frozen=True)
@@ -110,6 +111,10 @@ class MeshGenerator:
             yield i
             i += self.spacing
 
+    def __hash__(self):
+        return hash((self.error, self.spacing))
+
+    @memoize_generator
     def generate_positions(self, g1, g2):
         target_d = g1.mesh_distance(g2)
         for dy in self._spacing_aligned_range(-target_d - self.error, target_d + self.error):
@@ -119,7 +124,7 @@ class MeshGenerator:
                 if remain <= self.error:
                     yield (dx, dy)
 
-@dataclass
+@dataclass(frozen=True)
 class Range:
     lower: float = -math.inf
     upper: float = math.inf
@@ -156,6 +161,7 @@ class GearCalculator2D:
     available_gears = [Gear(n) for n in (8, 16, 24, 40, 12, 20, 36)]
     mesh_gen = MeshGenerator()
 
+    @memoize_generator
     def generate_trains(self, ratio, max_pairs, first_gear=None, last_gear=None):
         ratio_achieved = ratio.contains(1) if isinstance(ratio, Range) else ratio == 1
         if ratio_achieved:
@@ -173,6 +179,7 @@ class GearCalculator2D:
                     if last_gear is None or tail_node.edges or g2 == last_gear:
                         yield combined
 
+    @memoize_generator
     def _arrange_tree(self, root_node, dx_range=Range(), dy_range=Range()):
         if not root_node.edges:
             if dx_range.contains(0) and dy_range.contains(0):

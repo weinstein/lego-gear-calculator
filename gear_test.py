@@ -1,3 +1,4 @@
+import math
 import unittest
 
 from gear import *
@@ -153,15 +154,13 @@ class GearLayerTest(unittest.TestCase):
     def test_add_gears(self):
         layer = GearLayer3D()
         self.assertEqual(layer.add_gear(0, 0, g8), 0)
-        self.assertEqual(layer.add_gear(0, 0, g40), 1)
-        self.assertEqual(layer.add_gear(3, 0, g8, force_z=1), 1)
+        self.assertEqual(layer.add_gear_pair(0, 0, g40, 3, 0, g8), 1)
         self.assertEqual(layer.add_gear(3, 0, g12), 0)
 
     def test_add_gears_with_offset(self):
         layer = GearLayer3D(z_offset=12)
         self.assertEqual(layer.add_gear(0, 0, g8), 12)
-        self.assertEqual(layer.add_gear(0, 0, g40), 13)
-        self.assertEqual(layer.add_gear(3, 0, g8, force_z=13), 13)
+        self.assertEqual(layer.add_gear_pair(0, 0, g40, 3, 0, g8), 13)
         self.assertEqual(layer.add_gear(3, 0, g12), 12)
 
     def test_intersection(self):
@@ -179,8 +178,7 @@ class GearLayerTest(unittest.TestCase):
     def test_sort(self):
         layer = GearLayer3D()
         self.assertEqual(layer.add_gear(0, 0, g8), 0)
-        self.assertEqual(layer.add_gear(0, 0, g40), 1)
-        self.assertEqual(layer.add_gear(3, 0, g8, force_z=1), 1)
+        self.assertEqual(layer.add_gear_pair(0, 0, g40, 3, 0, g8), 1)
         self.assertEqual(layer.add_gear(3, 0, g12), 0)
         self.assertEqual(layer.z_sorted_gears(), [
             (0, 0, 0, g8),
@@ -225,11 +223,12 @@ class GearLayerTest(unittest.TestCase):
             trains, dx_range=Range(0,0), dy_range=Range(0,0))
         arrangements = list(GearLayers3D().add_axle_tree(t) for t in axle_trees)
         def _sort_key(layers):
-            return (layers.z_upper_bound(), len(layers.layers))
+            return (layers.z_upper_bound(),
+                    math.prod(layers.clearance_size()))
         arrangements.sort(key=_sort_key)
-        arrangements = list(map(GearLayers3D.z_sorted_gears, arrangements))
         self.assertGreaterEqual(len(arrangements), 1)
-        self.assertEqual(len(arrangements[0]), 2)
+        self.assertEqual(len(arrangements[0].layers), 2)
+
 
 
 if __name__ == '__main__':

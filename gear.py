@@ -238,12 +238,7 @@ class GearLayer3D:
         flattened = ((x, y, z, g) for z, xygs in self.z_gears.items() for (x, y, g) in xygs)
         return sorted(flattened, key=lambda t: (t[2], t[0], t[1]))
 
-    def add_gear(self, x, y, g, force_z=None):
-        if force_z is not None:
-            if (x, y, g) not in self.z_gears[force_z]:
-                self.z_gears[force_z].append((x, y, g))
-            return force_z
-
+    def add_gear(self, x, y, g):
         z_upper = self.z_upper_bound()
         for z in range(self.z_offset, 1 + z_upper):
             collides = any(g.intersects(prev_g, x - prev_x, y - prev_y)
@@ -253,6 +248,45 @@ class GearLayer3D:
                 return z
         raise AssertionError(f'no available z index in [{self.z_offset}, {z_upper}]; '
                              'this should never happen!')
+
+    def add_gear_pair(self, x1, y1, g1, x2, y2, g2):
+        z_upper = self.z_upper_bound()
+        for z in range(self.z_offset, 1 + z_upper):
+            collides = any(g.intersects(prev_g, x - prev_x, y - prev_y)
+                           for prev_x, prev_y, prev_g in self.z_gears[z]
+                           for (x, y, g) in ((x1, y1, g1), (x2, y2, g2)))
+            if not collides:
+                self.z_gears[z].append((x1, y1, g1))
+                self.z_gears[z].append((x2, y2, g2))
+                return z
+        raise AssertionError(f'no available z index in [{self.z_offset}, {z_upper}]; '
+                             'this should never happen!')
+
+    def num_gears(self):
+        return sum(len(gs) for gs in self.z_gears.values())
+
+    def stud_size(self):
+        min_x = min(x for x, _, _ in itertools.chain.from_iterable(self.z_gears.values()))
+        max_x = max(x for x, _, _ in itertools.chain.from_iterable(self.z_gears.values()))
+        min_y = min(y for _, y, _ in itertools.chain.from_iterable(self.z_gears.values()))
+        max_y = max(y for _, y, _ in itertools.chain.from_iterable(self.z_gears.values()))
+        min_z = self.z_offset
+        max_z = self.z_upper_bound() - 1
+        return (1 + max_x - min_x), (1 + max_y - min_y), (1 + max_z - min_z)
+
+    def clearance_size(self):
+        min_x = min(x - g.clearance_radius()
+                for x, _, g in itertools.chain.from_iterable(self.z_gears.values()))
+        max_x = max(x + g.clearance_radius()
+                for x, _, g in itertools.chain.from_iterable(self.z_gears.values()))
+        min_y = min(y - g.clearance_radius()
+                for _, y, g in itertools.chain.from_iterable(self.z_gears.values()))
+        max_y = max(y + g.clearance_radius()
+                for _, y, g in itertools.chain.from_iterable(self.z_gears.values()))
+        return (max_x - min_x), (max_y - min_y)
+
+    def __str__(self):
+        return f'{self.z_sorted_gears()}'
 
 
 @dataclass
@@ -273,14 +307,50 @@ class GearLayers3D:
             if needs_new_layer:
                 self.start_new_layer()
             for g1, g2, child in node.connections:
-                z = self.cur_layer().add_gear(node.x, node.y, g1)
                 child_needs_new_layer = self.cur_layer().intersects_axle(child.x, child.y)
-                self.cur_layer().add_gear(child.x, child.y, g2, force_z=z)
+                z = self.cur_layer().add_gear_pair(node.x, node.y, g1, child.x, child.y, g2)
                 todo.append((child, child_needs_new_layer))
         return self
+
+    def z_offset(self):
+        return self.layers[0].z_offset
 
     def z_upper_bound(self):
         return self.layers[-1].z_upper_bound()
 
     def z_sorted_gears(self):
         return list(map(GearLayer3D.z_sorted_gears, self.layers))
+
+    def num_gears(self):
+        return sum(layer.num_gears() for layer in self.layers)
+
+    def stud_size(self):
+        min_x = min(x for layer in self.layers
+                    for x, _, _ in itertools.chain.from_iterable(layer.z_gears.values()))
+        max_x = max(x for layer in self.layers
+                    for x, _, _ in itertools.chain.from_iterable(layer.z_gears.values()))
+        min_y = min(y for layer in self.layers
+                    for _, y, _ in itertools.chain.from_iterable(layer.z_gears.values()))
+        max_y = max(y for layer in self.layers
+                    for _, y, _ in itertools.chain.from_iterable(layer.z_gears.values()))
+        min_z = self.z_offset()
+        max_z = self.z_upper_bound() - 1
+        return (1 + max_x - min_x), (1 + max_y - min_y), (1 + max_z - min_z)
+
+    def clearance_size(self):
+        min_x = min(x - g.clearance_radius()
+                for layer in self.layers
+                for x, _, _, g in layer.z_sorted_gears())
+        max_x = max(x + g.clearance_radius()
+                for layer in self.layers
+                for x, _, _, g in layer.z_sorted_gears())
+        min_y = min(y - g.clearance_radius()
+                for layer in self.layers
+                for _, y, _, g in layer.z_sorted_gears())
+        max_y = max(y + g.clearance_radius()
+                for layer in self.layers
+                for _, y, _, g in layer.z_sorted_gears())
+        return (max_x - min_x), (max_y - min_y)
+
+    def __str__(self):
+        return f'{self.z_sorted_gears()}'

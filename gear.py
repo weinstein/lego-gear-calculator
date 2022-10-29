@@ -2,8 +2,9 @@ import functools
 import itertools 
 import math
 
-from collections import deque
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
+
 
 @dataclass(frozen=True)
 class Gear:
@@ -28,6 +29,16 @@ class Gear:
 
     def __str__(self):
         return f'{self.n_teeth}t'
+
+
+@dataclass(frozen=True)
+class Bushing:
+    def clearance_radius(self):
+        return 0.375
+
+    def __str__(self):
+        return '[B]'
+
 
 @dataclass
 class GearTreeNode:
@@ -192,3 +203,66 @@ class GearCalculator2D:
     def generate_axle_trees(self, gear_root_node, dx_range=Range(), dy_range=Range()):
         for arranged_edges in self._arrange_tree(gear_root_node, dx_range, dy_range):
             yield self._arranged_to_axle_tree(arranged_edges)
+
+
+@dataclass
+class GearLayer3D:
+    z_offset: int = 0
+    z_gears: defaultdict[list] = field(default_factory=lambda: defaultdict(list))
+
+    def intersects_axle(self, x, y):
+        return any(g.intersects(Bushing(), x - gx, y - gy)
+                   for gx, gy, g in itertools.chain.from_iterable(self.z_gears.values()))
+
+    def z_upper_bound(self):
+        return 1 + max(self.z_gears.keys()) if self.z_gears else self.z_offset
+
+    def find(self, x, y, g):
+        for z, xygs in self.z_gears.items():
+            if (x, y, g) in xygs:
+                return z
+        return None
+
+    def z_sorted_gears(self):
+        flattened = ((x, y, z, g) for z, xygs in self.z_gears.items() for (x, y, g) in xygs)
+        return sorted(flattened, key=lambda t: (t[2], t[0], t[1]))
+
+    def add_gear(self, x, y, g, force_z=None):
+        if force_z is not None:
+            if (x, y, g) not in self.z_gears[force_z]:
+                self.z_gears[force_z].append((x, y, g))
+            return force_z
+
+        z_upper = self.z_upper_bound()
+        for z in range(self.z_offset, 1 + z_upper):
+            collides = any(g.intersects(prev_g, x - prev_x, y - prev_y)
+                           for prev_x, prev_y, prev_g in self.z_gears[z])
+            if not collides:
+                self.z_gears[z].append((x, y, g))
+                return z
+        raise AssertionError(f'no available z index in [{self.z_offset}, {z_upper}]; '
+                             'this should never happen!')
+
+
+@dataclass
+class GearLayers3D:
+    layers: list = field(default_factory=lambda: [GearLayer3D()])
+
+    def cur_layer(self):
+        return self.layers[-1]
+
+    def start_new_layer(self):
+        self.layers.append(GearLayer3D(z_offset=self.cur_layer().z_upper_bound()))
+
+    def add_axle_tree(self, root):
+        todo = deque()
+        todo.append((root, False))
+        while todo:
+            node, needs_new_layer = todo.popleft()
+            if needs_new_layer:
+                self.start_new_layer()
+            for g1, g2, child in node.connections:
+                z = self.cur_layer().add_gear(node.x, node.y, g1)
+                child_needs_new_layer = self.cur_layer().intersects_axle(child.x, child.y)
+                self.cur_layer().add_gear(child.x, child.y, g2, force_z=z)
+                todo.append((child, child_needs_new_layer))

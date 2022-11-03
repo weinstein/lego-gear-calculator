@@ -41,18 +41,21 @@ class Bushing:
         return '[B]'
 
 
-@dataclass
+@dataclass(frozen=True)
 class GearTreeNode:
-    edges: list = field(default_factory=list)
+    edges: list[tuple[Gear, Gear, 'GearTreeNode']] = field(default_factory=list)
 
-    def connect(self, g1, g2):
-        next_node = GearTreeNode()
-        self.edges.append((g1, g2, next_node))
-        return next_node
+    def add_child(self, g1, g2, child=None):
+        child = child or GearTreeNode()
+        parent = GearTreeNode(edges=list(self.edges))
+        parent.edges.append((g1, g2, child))
+        return parent
 
-    def combine(self, other):
-        self.edges.extend(other.edges)
-        return self
+    def merge(self, *others):
+        merged_edges = list(self.edges)
+        for other in others:
+            merged_edges = merged_edges + other.edges
+        return GearTreeNode(edges=merged_edges)
 
     def traverse(self, node_fn=None, edge_fn=None):
         to_visit = deque()
@@ -67,11 +70,11 @@ class GearTreeNode:
                 to_visit.append(child)
 
     def leafs(self):
-        for g1, g2, child in self.edges:
-            if child.edges:
-                yield from child.leafs()
-            else:
-                yield (g1, g2, child)
+        if not self.edges:
+            yield self
+            return
+        for _, _, child in self.edges:
+            yield from child.leafs()
 
     def depth(self):
         ret = 0
@@ -91,11 +94,11 @@ class GearTreeNode:
 
     @classmethod
     def Sequence(cls, *pairs):
-        root = cls()
-        node = root
-        for g1, g2 in pairs:
-            node = node.connect(g1, g2)
-        return root
+        if not pairs:
+            return cls()
+        g1, g2 = pairs[0]
+        rest = pairs[1:]
+        return cls().add_child(g1, g2, cls.Sequence(*rest))
 
 @dataclass
 class MeshGenerator:
@@ -174,8 +177,7 @@ class GearCalculator2D:
             for g2 in self.available_gears:
                 r = g1 / g2
                 for tail_node in self.generate_trains(ratio / r, max_pairs - 1, last_gear=last_gear):
-                    combined = GearTreeNode()
-                    combined.connect(g1, g2).combine(tail_node)
+                    combined = GearTreeNode().add_child(g1, g2, tail_node)
                     if last_gear is None or tail_node.edges or g2 == last_gear:
                         yield combined
 

@@ -61,21 +61,13 @@ class MeshGeneratorTest(unittest.TestCase):
 
 class GearTreeTest(unittest.TestCase):
     def test_eq(self):
-        t1 = GearTreeNode()
-        t1.connect(g40, g8)
-        t2 = GearTreeNode()
-        t2.connect(g40, g8)
-        self.assertEqual(t1, t2)
-
-        t1.x, t1.y = 1, 2
-        t2.x, t2.y = 1, 2
+        t1 = GearTreeNode().add_child(g40, g8)
+        t2 = GearTreeNode().add_child(g40, g8)
         self.assertEqual(t1, t2)
 
     def test_neq(self):
-        t1 = GearTreeNode()
-        t1.connect(g40, g8)
-        t2 = GearTreeNode()
-        t2.connect(g40, g16)
+        t1 = GearTreeNode().add_child(g40, g8)
+        t2 = GearTreeNode().add_child(g40, g16)
         self.assertNotEqual(t1, t2)
 
 
@@ -93,9 +85,10 @@ class GearCalculatorTest(unittest.TestCase):
     def test_arrange_axles(self):
         calc2d = GearCalculator2D()
         calc2d.mesh_gen.error = 0.05
-        root = (GearTreeNode()
-                .combine(GearTreeNode.Sequence((g40, g8)))
-                .combine(GearTreeNode.Sequence((g16, g16))))
+        root = GearTreeNode().merge(
+                GearTreeNode.Sequence((g40, g8)),
+                GearTreeNode.Sequence((g16, g16)),
+               )
 
         axle_trees = set(calc2d.generate_axle_trees(root))
         expected_sample = Axle2D(x=0, y=0, connections=[

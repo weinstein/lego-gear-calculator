@@ -2,6 +2,8 @@ import functools
 import itertools 
 import math
 
+import ldraw
+
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from memoize import memoize_generator
@@ -160,6 +162,27 @@ class Axle2D:
             ret += child.__str__(indent+2)
         return ret
 
+    def clone(self):
+        return Axle2D(
+                x=self.x, y=self.y,
+                connections=list(
+                    (g1, g2, child.clone())
+                    for g1, g2, child in self.connections))
+
+    def append_leaf(self, other):
+        if not self.connections:
+            self.x, self.y = other.x, other.y
+            self.connections = other.connections
+            return
+        for _, _, child in self.connections:
+            child.append_leaf(other)
+
+    def __mul__(self, other):
+        ret = self.clone()
+        ret.append_leaf(other)
+        return ret
+
+
 class GearCalculator2D:
     available_gears = [Gear(n) for n in (8, 16, 24, 40, 12, 20, 36)]
     mesh_gen = MeshGenerator()
@@ -219,9 +242,17 @@ class GearCalculator2D:
 
 
 @dataclass
+class AxleSpan:
+    x: float
+    y: float
+    z: Range
+
+
+@dataclass
 class GearLayer3D:
-    z_offset: int = 0
+    z_offset: int = 1
     z_gears: defaultdict[list] = field(default_factory=lambda: defaultdict(list))
+    axles: list[AxleSpan] = field(default_factory=list)
 
     def intersects_axle(self, x, y):
         return any(g.intersects(Bushing(), x - gx, y - gy)
@@ -299,19 +330,21 @@ class GearLayers3D:
         return self.layers[-1]
 
     def start_new_layer(self):
-        self.layers.append(GearLayer3D(z_offset=self.cur_layer().z_upper_bound()))
+        self.layers.append(GearLayer3D(z_offset=self.cur_layer().z_upper_bound()+1))
 
     def add_axle_tree(self, root):
         todo = deque()
-        todo.append((root, False))
+        todo.append((root, False, None))
         while todo:
-            node, needs_new_layer = todo.popleft()
+            node, needs_new_layer, parent_z = todo.popleft()
             if needs_new_layer:
                 self.start_new_layer()
             for g1, g2, child in node.connections:
                 child_needs_new_layer = self.cur_layer().intersects_axle(child.x, child.y)
                 z = self.cur_layer().add_gear_pair(node.x, node.y, g1, child.x, child.y, g2)
-                todo.append((child, child_needs_new_layer))
+                todo.append((child, child_needs_new_layer, z))
+            axle_z_min = min(parent_z, self.cur_layer().z_offset - 1) if parent_z is not None else self.cur_layer().z_offset - 1
+            self.cur_layer().axles.append(AxleSpan(x=node.x, y=node.y, z=Range(lower=axle_z_min)))
         return self
 
     def z_offset(self):
@@ -353,6 +386,17 @@ class GearLayers3D:
                 for layer in self.layers
                 for _, y, _, g in layer.z_sorted_gears())
         return (max_x - min_x), (max_y - min_y)
+
+    def ldraw(self):
+        for layer in self.layers:
+            yield from (ldraw.gear(x, y, z, g.n_teeth) for x, y, z, g in layer.z_sorted_gears())
+            for axle_span in layer.axles:
+                z0 = axle_span.z.lower
+                z1 = layer.z_upper_bound()
+                yield ldraw.axle(axle_span.x, axle_span.y, z0, z1)
+
+    def ldraw_str(self):
+        return '\n'.join(map(str, self.ldraw()))
 
     def __str__(self):
         return f'{self.z_sorted_gears()}'

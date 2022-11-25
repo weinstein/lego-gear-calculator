@@ -136,19 +136,20 @@ class GearCalculatorTest(unittest.TestCase):
 class GearLayerTest(unittest.TestCase):
     def test_z_ub(self):
         layer = GearLayer3D()
-        self.assertEqual(layer.z_upper_bound(), 0)
-        layer.add_gear(0, 0, g40) # z=0
         self.assertEqual(layer.z_upper_bound(), 1)
-        layer.add_gear(1, 0, g40) # z=1
+        layer.add_gear(0, 0, g40) # z=1
         self.assertEqual(layer.z_upper_bound(), 2)
-        layer.add_gear(2, 0, g40) # z=2
+        layer.add_gear(1, 0, g40) # z=2
         self.assertEqual(layer.z_upper_bound(), 3)
+        layer.add_gear(2, 0, g40) # z=3
+        self.assertEqual(layer.z_upper_bound(), 4)
 
     def test_add_gears(self):
         layer = GearLayer3D()
-        self.assertEqual(layer.add_gear(0, 0, g8), 0)
-        self.assertEqual(layer.add_gear_pair(0, 0, g40, 3, 0, g8), 1)
-        self.assertEqual(layer.add_gear(3, 0, g12), 0)
+        self.assertEqual(layer.z_offset, 1)
+        self.assertEqual(layer.add_gear(0, 0, g8), 1)
+        self.assertEqual(layer.add_gear_pair(0, 0, g40, 3, 0, g8), 2)
+        self.assertEqual(layer.add_gear(3, 0, g12), 1)
 
     def test_add_gears_with_offset(self):
         layer = GearLayer3D(z_offset=12)
@@ -170,14 +171,14 @@ class GearLayerTest(unittest.TestCase):
 
     def test_sort(self):
         layer = GearLayer3D()
-        self.assertEqual(layer.add_gear(0, 0, g8), 0)
-        self.assertEqual(layer.add_gear_pair(0, 0, g40, 3, 0, g8), 1)
-        self.assertEqual(layer.add_gear(3, 0, g12), 0)
+        self.assertEqual(layer.add_gear(0, 0, g8), 1)
+        self.assertEqual(layer.add_gear_pair(0, 0, g40, 3, 0, g8), 2)
+        self.assertEqual(layer.add_gear(3, 0, g12), 1)
         self.assertEqual(layer.z_sorted_gears(), [
-            (0, 0, 0, g8),
-            (3, 0, 0, g12),
-            (0, 0, 1, g40),
-            (3, 0, 1, g8),
+            (0, 0, 1, g8),
+            (3, 0, 1, g12),
+            (0, 0, 2, g40),
+            (3, 0, 2, g8),
         ])
 
     def test_layer_sequence(self):
@@ -201,10 +202,10 @@ class GearLayerTest(unittest.TestCase):
         layers.add_axle_tree(axle_tree)
         self.assertEqual(len(layers.layers), 2)
         self.assertEqual(layers.layers[0].z_sorted_gears(), [
-            (0, 0, 0, g40),
-            (3, 0, 0, g8),
-            (0, 0, 1, g16),
-            (2, 0, 1, g16),
+            (0, 0, 1, g40),
+            (3, 0, 1, g8),
+            (0, 0, 2, g16),
+            (2, 0, 2, g16),
             ], msg=f'actual: {layers.layers[0].z_sorted_gears()}')
         self.assertEqual(layers.layers[1].z_sorted_gears(), [])
 
@@ -221,7 +222,6 @@ class GearLayerTest(unittest.TestCase):
         arrangements.sort(key=_sort_key)
         self.assertGreaterEqual(len(arrangements), 1)
         self.assertEqual(len(arrangements[0].layers), 2)
-
 
 
 if __name__ == '__main__':
